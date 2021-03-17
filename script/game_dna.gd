@@ -46,26 +46,41 @@ var benar = 0
 var salah = 0
 var kalah = 1
 
+var lang = "EN"
+
 func _ready():
 	print("Successfully enter scene Game")
 	$spawn.wait_time = speed
 	speed = global.get_global_speed()
 	nucleotide = global.get_global_nucleotide()
 	var kesulitan = global.get_global_kesulitan()
+	print(kesulitan)
+	
 	if(kesulitan == "Mudah"):
-		$latar/difficulty.text = str(kesulitan)
 		$latar/difficulty.set("custom_colors/font_color",Color(0,123,255))
 	elif(kesulitan == "Sedang"):
-		$latar/difficulty.text = str(kesulitan)
 		$latar/difficulty.set("custom_colors/font_color",Color(0,255,0))
 	elif(kesulitan == "Sulit"):
-		$latar/difficulty.text = str(kesulitan)
 		$latar/difficulty.set("custom_colors/font_color",Color(255,155,0))
 	elif(kesulitan == "Tak Hingga"):
-		$latar/difficulty.text = str(kesulitan)
 		$latar/difficulty.set("custom_colors/font_color",Color(255,0,0))
 		$latar/percent.visible = false
+	if(lang == "EN"):
+		kesulitan = translate(kesulitan)
+		$pause/Keluar/Label.text = "Exit"
+		
+	$latar/difficulty.text = str(kesulitan)
 	$fade.doOut()
+
+func translate(string):
+	var translate = {
+		'Mudah': "Easy",
+		'Sedang': "Medium",
+		'Sulit': "Hard",
+		'Tak Hingga' : "infinity",
+		'komentar_cobalagi' : "Nucleotide A pairs with T, while G pairs with C",
+	}
+	return translate[string]
 
 func spawn():
 	id+=1
@@ -225,6 +240,8 @@ func _on_Setting_pressed():
 		get_tree().paused = false
 		$pause.visible = false
 	pause_state = !pause_state
+	if lang == "EN":
+		$pause/title.text = "Setting"
 
 func _on_Tutorial_pressed():
 	$pause.visible = false
@@ -280,18 +297,25 @@ func hasil(jenis:String, komentar):
 		$hasil/title.text = "Coba Lagi"
 		$hasil/title.set("custom_colors/font_color",Color(255,0,0))
 		$hasil/label.text = "Nukleotida A berpasangan dengan T, sedangkan G berpasangan dengan C"
+		$hasil/label.text = translate('komentar_cobalagi')
 		if(komentar[0] !=""):
+			var nucleo = "Nukleotida "
 			var respond = " seharusnya berpasangan dengan "
+			var not_with = ", bukan dengan "
+			if (lang == "EN"):
+				respond = " should paired with  "
+				nucleo = "Nucleotide "
+				not_with = ", not a "
 			var soal = komentar[0]
 			var jawab = komentar[1]
 			if soal == "A":
-				respond = "Nukleotida "+soal+respond+"T, bukan dengan "+jawab
+				respond = nucleo+soal+respond+"T"+not_with+jawab
 			elif soal == "T":
-				respond = "Nukleotida "+soal+respond+"A, bukan dengan "+jawab
+				respond = nucleo+soal+respond+"A"+not_with+jawab
 			elif soal == "G":
-				respond = "Nukleotida "+soal+respond+"C, bukan dengan "+jawab
+				respond = nucleo+soal+respond+"C"+not_with+jawab
 			elif soal == "C":
-				respond = "Nukleotida "+soal+respond+"G, bukan dengan "+jawab
+				respond = nucleo+soal+respond+"G"+not_with+jawab
 			$hasil/label.text = respond
 		$hasil/TextureRect.visible = true;
 	else:

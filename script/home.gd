@@ -3,8 +3,18 @@ extends Node
 onready var global = get_node("/root/global")
 var next_scene = "res://scene/";
 
+var lang = "EN"
 
 func _ready():
+	if lang =="EN":
+		$tentang/Label.text = "DNA Assemble is an educational-strategy-based game to increase high school students' insights in understanding DNA assembly material in Biology subjects.\nThe game application can be formed with the support of related parties:\n\nGame Dev Studio (Tape Soft):\n- Hartawan Bahari Mulyadi\n- Muhammad Amri Zaman\n- Moh. Fahrul Hafidh"
+		$tentang/title.text = "About"
+		$kesulitan/container/mudah/Label.text = "Easy"
+		$kesulitan/container/sedang/Label.text = "Medium"
+		$kesulitan/container/sulit/Label.text = "Hard"
+		$kesulitan/container/tak_hingga/Label.text = "Infinite"
+		$kesulitan/title.text = "Dificulty Level"
+
 	pass
 
 func _on_Game_pressed():
