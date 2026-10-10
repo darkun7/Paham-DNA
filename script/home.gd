@@ -1,6 +1,6 @@
 extends Node
 
-onready var global = get_node("/root/global")
+@onready var global = get_node("/root/global")
 var next_scene = "res://scene/";
 
 var lang = "EN"
@@ -36,7 +36,7 @@ func _on_Tutorial_pressed():
 	$tutorial.visible = true
 
 func _on_fade_fade_finished():
-	get_tree().change_scene(next_scene)
+	get_tree().change_scene_to_file(next_scene)
 
 func _on_tutorial_close_btn():
 	$tutorial.visible = false

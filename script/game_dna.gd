@@ -1,7 +1,9 @@
+
 extends Node2D
 
-onready var global = get_node("/root/global")
+@onready var global = get_node("/root/global")
 
+# DNA textures
 var ra3 = preload("res://asset/dna/Purple-Orange-1-Rotate.png")
 var ra2 = preload("res://asset/dna/Purple-Orange-2-Rotate.png")
 var ra1 = preload("res://asset/dna/Purple-Orange-3-Rotate.png")
@@ -30,299 +32,437 @@ var lc1 = preload("res://asset/dna/Red-Pink-3.png")
 
 var mark = preload("res://asset/dna/marker.png")
 
-#onready var dna = get_node(dna).instance()
-var speed = 1.5
-var id = 0
-var ids = 1
-var dna = load("res://scene/dna.tscn")
-var size = 1
-var sizeAr= [1,2,3,2]
-var score = 0
-var nucleotide = 46
-var pause_state = false
-var next_scene = "res://scene/";
+const DNA_SCENE = preload("res://scene/dna.tscn")
+const HOME_SCENE = "res://scene/home.tscn"
 
-var benar = 0
-var salah = 0
-var kalah = 1
+var speed: float = 1.5
+var id: int = 0
+var ids: int = 1
+var size: int = 1
+var sizeAr = [1, 2, 3, 2]
 
-var lang = "EN"
+var score: int = 0
+var nucleotide: int = 46
+var pause_state: bool = false
+var next_scene: String = ""
 
-func _ready():
+var benar: int = 0
+var salah: int = 0
+var kalah: int = 1
+
+var lang: String = "EN"
+var game_finished: bool = false
+var transitioning: bool = false
+
+
+func _ready() -> void:
 	print("Successfully enter scene Game")
+
+	speed = float(global.get_global_speed())
+	nucleotide = int(global.get_global_nucleotide())
+
+	# Prevent invalid timer duration.
+	speed = maxf(speed, 0.01)
+	nucleotide = maxi(nucleotide, 1)
+
 	$spawn.wait_time = speed
-	speed = global.get_global_speed()
-	nucleotide = global.get_global_nucleotide()
-	var kesulitan = global.get_global_kesulitan()
+
+	var kesulitan: String = str(global.get_global_kesulitan())
 	print(kesulitan)
-	
-	if(kesulitan == "Mudah"):
-		$latar/difficulty.set("custom_colors/font_color",Color(0,123,255))
-	elif(kesulitan == "Sedang"):
-		$latar/difficulty.set("custom_colors/font_color",Color(0,255,0))
-	elif(kesulitan == "Sulit"):
-		$latar/difficulty.set("custom_colors/font_color",Color(255,155,0))
-	elif(kesulitan == "Tak Hingga"):
-		$latar/difficulty.set("custom_colors/font_color",Color(255,0,0))
-		$latar/percent.visible = false
-	if(lang == "EN"):
-		kesulitan = translate(kesulitan)
+
+	match kesulitan:
+		"Mudah":
+			$latar/difficulty.add_theme_color_override(
+				"font_color", Color8(0, 123, 255)
+			)
+		"Sedang":
+			$latar/difficulty.add_theme_color_override(
+				"font_color", Color8(0, 255, 0)
+			)
+		"Sulit":
+			$latar/difficulty.add_theme_color_override(
+				"font_color", Color8(255, 155, 0)
+			)
+		"Tak Hingga":
+			$latar/difficulty.add_theme_color_override(
+				"font_color", Color8(255, 0, 0)
+			)
+			$latar/percent.visible = false
+
+	if lang == "EN":
+		kesulitan = translate_text(kesulitan)
 		$pause/Keluar/Label.text = "Exit"
-		
-	$latar/difficulty.text = str(kesulitan)
+
+	$latar/difficulty.text = kesulitan
 	$fade.doOut()
 
-func translate(string):
-	var translate = {
-		'Mudah': "Easy",
-		'Sedang': "Medium",
-		'Sulit': "Hard",
-		'Tak Hingga' : "infinity",
-		'komentar_cobalagi' : "Nucleotide A pairs with T, while G pairs with C",
-	}
-	return translate[string]
 
-func spawn():
-	id+=1
-	size+=1
-	if size>=4:
-		size=0
-	
-	var object = dna.instance()
-	object.name = "dna_"+str(id)
+# Renamed to avoid collision with Node2D.translate()
+func translate_text(key: String) -> String:
+	var translations = {
+		"Mudah": "Easy",
+		"Sedang": "Medium",
+		"Sulit": "Hard",
+		"Tak Hingga": "Infinity",
+		"komentar_cobalagi": "Nucleotide A pairs with T, while G pairs with C"
+	}
+
+	return str(translations.get(key, key))
+
+
+func spawn() -> void:
+	if game_finished:
+		return
+
+	id += 1
+	size += 1
+
+	if size >= 4:
+		size = 0
+
+	var object = DNA_SCENE.instantiate()
+
+	if object == null:
+		push_error("Failed to instantiate DNA scene.")
+		return
+
+	object.name = "dna_" + str(id)
+
 	var gene = random_gene()
+
 	object.set_gene(gene)
 	object.set_size(sizeAr[size])
-	dna_texture(object)
-	object.set_speed(speed*100)
-	object.set_position($spawnpos.get_position()) 
-	$spawnpos.add_child(object)
-	#update_marker()
-	
-	#print(str(sizeAr[size])+str(object.get_gene()))
 
-func _on_Spawn_timeout():
-	if $spawnpos.get_child_count()<nucleotide:
+	dna_texture(object)
+
+	#object.set_velocity(speed * 100.0)
+	object.set_move_speed(speed * 100.0)
+	#object.set_velocity(Vector2(0.0, speed * 100.0))
+	object.position = $spawnpos.position
+
+	$spawnpos.add_child(object)
+
+
+func _on_Spawn_timeout() -> void:
+	if game_finished:
+		return
+
+	if $spawnpos.get_child_count() < nucleotide:
 		spawn()
 
-func random_gene()->String:
-	var rng = RandomNumberGenerator.new()
-	rng.randomize()
-	var random = rng.randi_range(1, 4)
-	var gene
-	if(random==1):
-		gene = "A"
-	elif(random==2):
-		gene = "T"
-	elif(random==3):
-		gene = "G"
+
+func random_gene() -> String:
+	var genes = ["A", "T", "G", "C"]
+	return genes[randi_range(0, genes.size() - 1)]
+
+
+func dna_texture(object) -> void:
+	var num: int = int(object.get_size())
+	var gene: String = str(object.get_gene())
+
+	var textures = {
+		"A": [ra1, ra2, ra3],
+		"T": [rt1, rt2, rt3],
+		"G": [rg1, rg2, rg3],
+		"C": [rc1, rc2, rc3]
+	}
+
+	if not textures.has(gene):
+		return
+
+	var index = clampi(num - 1, 0, 2)
+	var sprite = object.get_node_or_null("right")
+
+	if sprite != null:
+		sprite.texture = textures[gene][index]
+
+
+func dna_texture_ans(object) -> void:
+	var num: int = int(object.get_size())
+	var gene: String = str(object.get_gene_ans())
+
+	var textures = {
+		"A": [la1, la2, la3],
+		"T": [lt1, lt2, lt3],
+		"G": [lg1, lg2, lg3],
+		"C": [lc1, lc2, lc3]
+	}
+
+	if not textures.has(gene):
+		return
+
+	var index = clampi(num - 1, 0, 2)
+	var sprite = object.get_node_or_null("left")
+
+	if sprite != null:
+		sprite.texture = textures[gene][index]
+
+
+func update_marker() -> void:
+	var target = $spawnpos.find_child(
+		"dna_" + str(ids - 1), true, false
+	)
+
+	if target != null:
+		var marker_node = target.get_node_or_null("marker")
+
+		if marker_node != null:
+			marker_node.texture = mark
+
+
+func action(gene: String) -> void:
+	if game_finished or pause_state:
+		return
+
+	var target = $spawnpos.find_child(
+		"dna_" + str(ids), true, false
+	)
+
+	if target == null:
+		return
+
+	target.set_gene_ans(gene)
+
+	var marker_node = target.get_node_or_null("marker")
+
+	if marker_node != null:
+		marker_node.texture = null
+
+	target.set_fill(true)
+
+	dna_texture_ans(target)
+	checkNilai(target)
+
+	ids += 1
+
+
+func checkNilai(target) -> void:
+	var soal: String = str(target.get_gene())
+	var jawab: String = str(target.get_gene_ans())
+
+	var pasangan = {
+		"A": "T",
+		"T": "A",
+		"G": "C",
+		"C": "G"
+	}
+
+	if pasangan.get(soal, "") == jawab:
+		score += 100
+		benar += 1
+		$background/actionRespond.play("correct")
 	else:
-		gene = "C"
-	return gene
+		salah += 1
+		$background/actionRespond.play("wrong")
+		hasil("Coba Lagi", [soal, jawab])
 
-func dna_texture(object):
-	var num = object.get_size()
-	if(object.get_gene()=="A"):
-		if(num==1 || num==0):
-			object.get_node("right").set_texture(ra1)
-		elif(num==2):
-			object.get_node("right").set_texture(ra2)
-		elif(num==3):
-			object.get_node("right").set_texture(ra3)
-	elif(object.get_gene()=="T"):
-		if(num==1 || num==0):
-			object.get_node("right").set_texture(rt1)
-		elif(num==2):
-			object.get_node("right").set_texture(rt2)
-		elif(num==3):
-			object.get_node("right").set_texture(rt3)
-	elif(object.get_gene()=="G"):
-		if(num==1 || num==0):
-			object.get_node("right").set_texture(rg1)
-		elif(num==2):
-			object.get_node("right").set_texture(rg2)
-		elif(num==3):
-			object.get_node("right").set_texture(rg3)
-	elif(object.get_gene()=="C"):
-		if(num==1 || num==0):
-			object.get_node("right").set_texture(rc1)
-		elif(num==2):
-			object.get_node("right").set_texture(rc2)
-		elif(num==3):
-			object.get_node("right").set_texture(rc3)
-	pass
-	
-func dna_texture_ans(object):
-	var num = object.get_size()
-	if(object.get_gene_ans()=="A"):
-		if(num==1 || num==0):
-			object.get_node("left").set_texture(la1)
-		elif(num==2):
-			object.get_node("left").set_texture(la2)
-		elif(num==3):
-			object.get_node("left").set_texture(la3)
-	elif(object.get_gene_ans()=="T"):
-		if(num==1 || num==0):
-			object.get_node("left").set_texture(lt1)
-		elif(num==2):
-			object.get_node("left").set_texture(lt2)
-		elif(num==3):
-			object.get_node("left").set_texture(lt3)
-	elif(object.get_gene_ans()=="G"):
-		if(num==1 || num==0):
-			object.get_node("left").set_texture(lg1)
-		elif(num==2):
-			object.get_node("left").set_texture(lg2)
-		elif(num==3):
-			object.get_node("left").set_texture(lg3)
-	elif(object.get_gene_ans()=="C"):
-		if(num==1 || num==0):
-			object.get_node("left").set_texture(lc1)
-		elif(num==2):
-			object.get_node("left").set_texture(lc2)
-		elif(num==3):
-			object.get_node("left").set_texture(lc3)
-	#object.get_node("right").texture="res://asset/dna/Purple-Blue-1-Rotate.png"
-	pass
-	
-func update_marker():
-	var check=ids-1
-	var target = $spawnpos.find_node("dna_"+str(ids-1),true,false)
-	if(target!=null):
-		target.get_node("marker").set_texture(mark)
-	pass
+	var percent: float = (
+		float(score) / float(nucleotide)
+	)
 
-func action(gene):
-	var target = $spawnpos.find_node("dna_"+str(ids),true,false)
-	if(target!=null):
-		target.set_gene_ans(gene)
-		target.get_node("marker").texture = null
-		target.set_fill(true)
-		#print(str(target.get_fill()))
-		dna_texture_ans(target)
-		
-		checkNilai(target)
-		ids+=1
-	pass
+	$latar/score.text = "Score: " + str(score)
+	$latar/percent.text = "%.2f%%" % percent
 
-func checkNilai(target):
-	var soal = target.get_gene()
-	var jawab = target.get_gene_ans()
-	if (soal=="A" and jawab=="T")||(soal=="T" and jawab=="A")||(soal=="G" and jawab=="C")||(soal=="C" and jawab=="G"):
-		score+=100
-		benar+=1
-		$background.get_node("actionRespond").play("correct")
-	else:
-		salah+=1
-		$background.get_node("actionRespond").play("wrong")
-		hasil("Coba Lagi", [soal,jawab])
-	var percent = (score/nucleotide)
-	$latar.get_node("score").text = "Score: "+str(score)
-	$latar.get_node("percent").text = str(percent)+"%"
 
-func _on_A_pressed():
+# DNA answer buttons
+
+func _on_A_pressed() -> void:
 	action("A")
 
-func _on_T_pressed():
+
+func _on_T_pressed() -> void:
 	action("T")
 
-func _on_G_pressed():
+
+func _on_G_pressed() -> void:
 	action("G")
 
-func _on_C_pressed():
+
+func _on_C_pressed() -> void:
 	action("C")
 
-func _on_Setting_pressed():
-	if(!pause_state):
-		get_tree().paused = true
-		$pause.visible = true
-	else:
-		get_tree().paused = false
-		$pause.visible = false
-	pause_state = !pause_state
+
+# Pause management
+
+func set_game_paused(value: bool) -> void:
+	pause_state = value
+	get_tree().paused = value
+
+
+func _on_Setting_pressed() -> void:
+	if game_finished:
+		return
+
+	var new_state = not pause_state
+
+	$pause.visible = new_state
+	set_game_paused(new_state)
+
 	if lang == "EN":
 		$pause/title.text = "Setting"
 
-func _on_Tutorial_pressed():
+
+func _on_Tutorial_pressed() -> void:
 	$pause.visible = false
 	$tutorial.visible = true
 
-func _on_Keluar_pressed():
-	next_scene += 'home.tscn'
-	$fade.doIn()
-	get_tree().paused = false
-	pause_state = !pause_state
+	set_game_paused(true)
 
-func _on_hasil_close_pressed():
-	next_scene += 'home.tscn'
-	$fade.doIn()
-	get_tree().paused = false
-	pause_state = !pause_state
 
-func _on_fade_animation_finished(anim_name):
-	if(next_scene!="res://scene/"):
-		get_tree().change_scene(next_scene)
+func _on_Keluar_pressed() -> void:
+	go_home()
 
-func _on_setting_close_pressed():
-	get_tree().paused = false
-	pause_state = !pause_state
+
+func _on_hasil_close_pressed() -> void:
+	go_home()
+
+
+func go_home() -> void:
+	if transitioning:
+		return
+
+	transitioning = true
+	next_scene = HOME_SCENE
+
 	$pause.visible = false
-	
-
-func _on_tutorial_close_pressed():
-	get_tree().paused = false
-	pause_state = !pause_state
 	$tutorial.visible = false
+	$hasil.visible = false
+
+	set_game_paused(false)
+	$fade.doIn()
 
 
-func _on_criticalArea_body_entered(body):
-	if !(body.get_fill()):
-		kalah-=1
-		if(kalah<0):
+func _on_fade_animation_finished(_anim_name: String) -> void:
+	if next_scene.is_empty():
+		return
+
+	var scene_path = next_scene
+	next_scene = ""
+
+	get_tree().change_scene_to_file(scene_path)
+
+
+func _on_setting_close_pressed() -> void:
+	$pause.visible = false
+	set_game_paused(false)
+
+
+func _on_tutorial_close_pressed() -> void:
+	$tutorial.visible = false
+	set_game_paused(false)
+
+
+func _on_tutorial_close_btn() -> void:
+	_on_tutorial_close_pressed()
+
+
+# Collision and game-over handling
+
+func _on_criticalArea_body_entered(body: Node2D) -> void:
+	if game_finished:
+		return
+
+	if not body.has_method("get_fill"):
+		return
+
+	if not body.get_fill():
+		kalah -= 1
+
+		if kalah < 0:
 			hasil("Coba Lagi", [""])
-	if body.name== "dna_"+str(nucleotide):
-		hasil("Berhasil", [""])
-		
-func hasil(jenis:String, komentar):
-	get_tree().paused = true
-	pause_state = true
-	if(jenis=="Berhasil"):
-		$hasil.visible= true
-		$hasil/title.text = "Berhasil"
-		$hasil/title.set("custom_colors/font_color",Color(0,255,0))
-		$hasil/label.text = "Persentase: "+str(score/nucleotide)+"%\nScore: "+str(score)+"\nJawaban benar: "+str(benar)+"\nJawaban salah: "+str(salah)
-		$hasil/TextureRect.visible = false;
-	elif(jenis=="Coba Lagi"):
-		$hasil.visible= true
-		$hasil/title.text = "Coba Lagi"
-		$hasil/title.set("custom_colors/font_color",Color(255,0,0))
-		$hasil/label.text = "Nukleotida A berpasangan dengan T, sedangkan G berpasangan dengan C"
-		$hasil/label.text = translate('komentar_cobalagi')
-		if(komentar[0] !=""):
-			var nucleo = "Nukleotida "
-			var respond = " seharusnya berpasangan dengan "
-			var not_with = ", bukan dengan "
-			if (lang == "EN"):
-				respond = " should paired with  "
-				nucleo = "Nucleotide "
-				not_with = ", not a "
-			var soal = komentar[0]
-			var jawab = komentar[1]
-			if soal == "A":
-				respond = nucleo+soal+respond+"T"+not_with+jawab
-			elif soal == "T":
-				respond = nucleo+soal+respond+"A"+not_with+jawab
-			elif soal == "G":
-				respond = nucleo+soal+respond+"C"+not_with+jawab
-			elif soal == "C":
-				respond = nucleo+soal+respond+"G"+not_with+jawab
-			$hasil/label.text = respond
-		$hasil/TextureRect.visible = true;
-	else:
-		pass
-	pass
+			return
 
-func _on_tutorial_close_btn():
-	get_tree().paused = false
-	pause_state = !pause_state
-	$tutorial.visible = false
+	if body.name == "dna_" + str(nucleotide):
+		hasil("Berhasil", [""])
+
+
+func hasil(jenis: String, komentar: Array) -> void:
+	if game_finished:
+		return
+
+	game_finished = true
+	set_game_paused(true)
+
+	$hasil.visible = true
+
+	if jenis == "Berhasil":
+		$hasil/title.text = (
+			"Success" if lang == "EN" else "Berhasil"
+		)
+
+		$hasil/title.add_theme_color_override(
+			"font_color", Color8(0, 255, 0)
+		)
+
+		var percent = (
+			float(score) / float(nucleotide)
+		)
+
+		if lang == "EN":
+			$hasil/label.text = (
+				"Percentage: %.2f%%\n" % percent
+				+ "Score: " + str(score) + "\n"
+				+ "Correct answers: " + str(benar) + "\n"
+				+ "Wrong answers: " + str(salah)
+			)
+		else:
+			$hasil/label.text = (
+				"Persentase: %.2f%%\n" % percent
+				+ "Score: " + str(score) + "\n"
+				+ "Jawaban benar: " + str(benar) + "\n"
+				+ "Jawaban salah: " + str(salah)
+			)
+
+		$hasil/TextureRect.visible = false
+
+	elif jenis == "Coba Lagi":
+		$hasil/title.text = (
+			"Try Again" if lang == "EN" else "Coba Lagi"
+		)
+
+		$hasil/title.add_theme_color_override(
+			"font_color", Color8(255, 0, 0)
+		)
+
+		var message = (
+			"Nukleotida A berpasangan dengan T, "
+			+ "sedangkan G berpasangan dengan C"
+		)
+
+		if lang == "EN":
+			message = translate_text("komentar_cobalagi")
+
+		if komentar.size() >= 2 and str(komentar[0]) != "":
+			var soal: String = str(komentar[0])
+			var jawab: String = str(komentar[1])
+
+			var pasangan = {
+				"A": "T",
+				"T": "A",
+				"G": "C",
+				"C": "G"
+			}
+
+			var expected = str(pasangan.get(soal, ""))
+
+			if not expected.is_empty():
+				if lang == "EN":
+					message = (
+						"Nucleotide " + soal
+						+ " should pair with " + expected
+						+ ", not with " + jawab
+					)
+				else:
+					message = (
+						"Nukleotida " + soal
+						+ " seharusnya berpasangan dengan "
+						+ expected
+						+ ", bukan dengan " + jawab
+					)
+
+		$hasil/label.text = message
+		$hasil/TextureRect.visible = true
+
+	else:
+		game_finished = false
+		set_game_paused(false)

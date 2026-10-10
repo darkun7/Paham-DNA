@@ -1,0 +1,6 @@
+res://default_env.tres
+res://script/game_dna.gd
+res://script/dna.gd
+res://scene/home.tscn
+res://scene/tutorial.tscn
+res://scene/game_dna.tscn
